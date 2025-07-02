@@ -42,3 +42,11 @@ def speak(text: str):
     pygame.mixer.music.stop()
     pygame.mixer.music.unload()  # ✅ Unload the file
     os.remove(filename)          # ✅ Now it's safe to delete
+
+
+
+def is_dismiss_command(text: str) -> bool:
+    if not text:
+        return False
+    dismiss_phrases = ["nevermind", "never mind", "nothing", "leave it", "forget it"]
+    return any(phrase in text.lower() for phrase in dismiss_phrases)
