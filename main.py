@@ -1,75 +1,115 @@
 import speech_recognition as sr
-import webbrowser
-import pyttsx3
 import os
-import musicLibrary
-import requests
-#pip install pocketsphinx
+import uuid
+import random
+import pygame
+import time
+from google.cloud import texttospeech
 
+# Set Google credentials path
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "virtual-assistant-464710-09a9cb6ee73b.json"
 
-recognizer=sr.Recognizer()
-engine= pyttsx3.init()
-newsapi="4cd5829204fa4c0ca83d0f34774ae296"
+# Initialize Google TTS client
+tts_client = texttospeech.TextToSpeechClient()
 
+# Voice config
+voice_params = texttospeech.VoiceSelectionParams(
+    language_code="en-IN",
+    name="en-IN-Chirp3-HD-Callirrhoe"
+)
+audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
+# Initialize pygame
+pygame.mixer.init()
 
 def speak(text):
-    engine.say(text)
-    engine.runAndWait()
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+    response = tts_client.synthesize_speech(input=synthesis_input, voice=voice_params, audio_config=audio_config)
 
-def processCommand(c):
-    if "open google" in c.lower():
-        webbrowser.open("https://google.com")
-    elif "open explorer" in c.lower():
-        os.system("explorer")
-    elif c.lower().startswith("play"):
-        song=c.lower().split(" ")[1]
-        link=musicLibrary.music[song]
-        webbrowser.open(link)
-    elif "news" in c.lower():
-        r=requests.get(f"https://newsapi.org/v2/top-headlines?country=in&apiKey={newsapi}")
-        if r.status_code == 200:
-            data = r.json()
-            articles=data.get('articles',[])
-            for article in articles:
-                speak(article['title'])
+    filename = f"nova-{uuid.uuid4()}.mp3"
+    with open(filename, "wb") as out:
+        out.write(response.audio_content)
 
+    pygame.mixer.music.load(filename)
+    pygame.mixer.music.play()
 
+    while pygame.mixer.music.get_busy():
+        pygame.time.Clock().tick(10)
 
+    pygame.mixer.music.stop()
+    pygame.mixer.quit()
+    pygame.mixer.init()
+    os.remove(filename)
 
-                
+# Wake response options
+wake_responses = [
+    "Yes?",
+    "How can I help you?",
+    "What can I do for you today?",
+    "I'm listening.",
+    "How may I be of assistance?"
+]
 
-if __name__=="__main__":
-    speak("Initializing AI")
-    while True:
-        #Listen for the wake word "Doc"
-        # obtain audio from the microphone
-        r = sr.Recognizer()
-        
-        print("recognizing...")
-    # recognize speech using Google
+def listen_for_command():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("🎤 Listening for command...")
+        recognizer.adjust_for_ambient_noise(source)
         try:
-            with sr.Microphone() as source:
-                print("Listening....!")
-                audio = r.listen(source, timeout=5, phrase_time_limit=5)
-            word=r.recognize_google(audio)
-            #word=word.lower()
-            print(word)
-            if "nova" in word.lower().strip():
-                speak("At your service...")
-                with sr.Microphone() as source:
-                    print("Nova Active....!")
-                    audio = r.listen(source)
-                    command=r.recognize_google(audio)
+            audio = recognizer.listen(source, timeout=7)
+            command = recognizer.recognize_google(audio)
+            return command
+        except:
+            return None
 
-                    processCommand(command)
-                
-                
+# Main loop
+if __name__ == "__main__":
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        recognizer.adjust_for_ambient_noise(source)
+        print("🎤 Nova is on standBy...")
 
+        while True:
+            try:
+                print(" Try waking Nova...")
+                audio = recognizer.listen(source, timeout=5)
+                query = recognizer.recognize_google(audio).lower()
+                print("Heard:", query)
 
-            elif "stop" in word.lower().strip():
-                speak("Closing AI")
-                break
-                
-        except Exception as e:
-            print("I think i ran through some error; {0}".format(e))
+                # 🟥 Shutdown command
+                if "shut down" in query or "shutdown" in query:
+                    speak("Powering off. Goodbye.")
+                    break
+
+                # 🟢 Wake word
+                elif "nova" in query:
+                    print("🎙️ Nova Active...")
+                    speak(random.choice(wake_responses))
+
+                    # 🎤 Listen for actual command
+                    command = listen_for_command()
+                    if command:
+                        command = command.lower()
+                        print("Command:", command)
+
+                        if "stop" in command:
+                            speak("Very well.")
+                            time.sleep(1.2)  # avoid mic picking up echo
+                            continue
+                        elif "shut down" in command or "shutdown" in command:
+                            speak("Powering off.")
+                            break
+                        else:
+                            speak(f"You said: {command}")
+                            time.sleep(1.2)  # buffer before looping
+
+                    else:
+                        speak("I didn't catch that.")
+                        time.sleep(1.2)
+
+            except sr.WaitTimeoutError:
+                pass
+            except sr.UnknownValueError:
+                pass
+            except sr.RequestError as e:
+                print(f"❌ Could not request results: {e}")
