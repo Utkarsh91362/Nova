@@ -1,23 +1,7 @@
-# Ignore Python cache and compiled files
-__pycache__/
-*.py[cod]
-
-# Ignore virtual environment
-.venv/
-
-# Ignore secret credentials
 nova-va.json
-
-# Ignore temporary audio output files
+.venv/
 *.mp3
-
-# VS Code config (if you're using it)
-.vscode/
-
-# Ignore OS-specific files
-.DS_Store
-Thumbs.db
-
-# Ignore logs and temp files
+__pycache__/
+*.pyc
+*.pyo
 *.log
-*.tmp
