@@ -1,96 +1,110 @@
 import speech_recognition as sr
-import webbrowser
-import pyttsx3
 import os
-import musicLibrary
-import requests
+import uuid
+import random
+import pygame
+from google.cloud import texttospeech
 
-# Initialize recognizer and TTS engine
-recognizer = sr.Recognizer()
-engine = pyttsx3.init()
-newsapi = "4cd5829204fa4c0ca83d0f34774ae296"  # Replace if needed
+# Set Google credentials path
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "nova-va.json"
+
+# Initialize Google TTS client
+tts_client = texttospeech.TextToSpeechClient()
+
+# Voice config
+voice_params = texttospeech.VoiceSelectionParams(
+    language_code="en-IN",
+    name="en-IN-Chirp3-HD-Callirrhoe"
+)
+audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+
+# Initialize pygame
+pygame.mixer.init()
 
 def speak(text):
-    engine.say(text)
-    engine.runAndWait()
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+    response = tts_client.synthesize_speech(input=synthesis_input, voice=voice_params, audio_config=audio_config)
+    
+    filename = f"nova-{uuid.uuid4()}.mp3"
+    with open(filename, "wb") as out:
+        out.write(response.audio_content)
 
-def processCommand(c):
-    c = c.lower().strip()
-    print("Command received:", c)
+    pygame.mixer.music.load(filename)
+    pygame.mixer.music.play()
 
-    if "open google" in c:
-        speak("Opening Google.")
-        webbrowser.open("https://google.com")
+    while pygame.mixer.music.get_busy():
+        pygame.time.Clock().tick(10)
 
-    elif "open explorer" in c:
-        speak("Opening File Explorer.")
-        os.system("explorer")
+    pygame.mixer.music.stop()
+    pygame.mixer.quit()
+    pygame.mixer.init()
 
-    elif c.startswith("play"):
+    os.remove(filename)
+
+# Wake response options
+wake_responses = [
+    "Yes?",
+    "How can I help you?",
+    "What can I do for you today?",
+    "I'm listening.",
+    "How may I be of assistance?"
+]
+
+def listen_for_command():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("🎤 Listening for command...")
+        recognizer.adjust_for_ambient_noise(source)
         try:
-            song = c.split(" ", 1)[1]
-            link = musicLibrary.music.get(song)
-            if link:
-                speak(f"Playing {song}")
-                webbrowser.open(link)
-            else:
-                speak(f"Sorry, I couldn't find the song {song}.")
-        except Exception as e:
-            speak("Something went wrong while trying to play the song.")
-            print("Music Error:", e)
+            audio = recognizer.listen(source, timeout=7)
+            command = recognizer.recognize_google(audio)
+            print("Command:", command)
+            return command
+        except:
+            return None
 
-    elif any(keyword in c for keyword in ["news", "tell me the news", "latest news", "headlines"]):
-        speak("Fetching top news .")
-        try:
-            url = f"https://newsapi.org/v2/top-headlines?country=us&apiKey={newsapi}"
-            r = requests.get(url)
-            print("Status Code:", r.status_code)
-
-            if r.status_code == 200:
-                data = r.json()
-                print("Raw API Response:", data)
-                articles = data.get('articles', [])
-                print("Number of articles found:", len(articles))
-
-                if not articles:
-                    speak("Sorry, no news found.")
-                else:
-                    for i, article in enumerate(articles[:3], 1):  # Limit to 6 articles
-                        title = article.get('title', 'No title available')
-                        print(f"{i}. {title}")
-                        speak(title)
-            else:
-                speak("Failed to fetch news. Status code: " + str(r.status_code))
-        except Exception as e:
-            speak("Something went wrong while fetching the news.")
-            print("News Error:", e)
-
-    else:
-        speak("Sorry, I didn’t understand that command.")
-
-# Main program loop
+# ✅ Main loop — continuous listening for 'nova' or 'shut down'
 if __name__ == "__main__":
-    speak("Initializing Nova AI")
-    while True:
-        try:
-            with sr.Microphone() as source:
-                print("\n🎤 Listening for wake word...")
-                audio = recognizer.listen(source, timeout=5, phrase_time_limit=5)
-            word = recognizer.recognize_google(audio).lower().strip()
-            print("You said:", word)
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        recognizer.adjust_for_ambient_noise(source)
+        print("🎤 Nova is on standBy...")
 
-            if "nova" in word:
-                speak("At your service...")
-                with sr.Microphone() as source:
-                    print("🎤 Nova Active... Listening for command.")
-                    audio = recognizer.listen(source, timeout=5, phrase_time_limit=7)
-                    command = recognizer.recognize_google(audio)
-                    print("Recognized Command:", command)
-                    processCommand(command)
+        while True:
+            try:
+                print(" Try waking Nova...")
+                audio = recognizer.listen(source, timeout=5)
+                query = recognizer.recognize_google(audio).lower()
+                print("Heard:", query)
 
-            elif "stop" in word:
-                speak("Closing Nova. Goodbye.")
-                break
+                if "shut down" in query or "shutdown" in query:
+                    speak("Powering off. Goodbye.")
+                    break
 
-        except Exception as e:
-            print("⚠️ Error:", e)
+                elif "nova" in query:
+                    print("🎙️ Nova Active...")
+                    speak(random.choice(wake_responses))
+
+                    # Listen for actual command now
+                    command = listen_for_command()
+                    if command:
+                        command = command.lower()
+                        print("Command:", command)
+
+                        if "stop" in command:
+                            speak("Very Well")
+                            continue  # goes back to waiting for wake word
+                        elif "shut down" in command or "shutdown" in command:
+                            speak("Powering off.")
+                            break
+                        else:
+                            speak(f"You said: {command}")
+                    else:
+                        speak("I didn't catch that.")
+
+            except sr.WaitTimeoutError:
+                pass
+            except sr.UnknownValueError:
+                pass
+            except sr.RequestError as e:
+                print(f"❌ Could not request results: {e}")
