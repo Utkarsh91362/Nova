@@ -1,7 +1,8 @@
 import speech_recognition as sr
 import random
 import time
-from actions.utils import speak
+import threading
+from actions.utils import *
 from actions.system_controls.open_application import open_application
 
 # 🌟 Wake responses
@@ -14,13 +15,24 @@ wake_responses = [
     "hmmm"
 ]
 
+# 🔄 Thread for speaking
+speaking_thread = None
+
+def speak_async(text):
+    global speaking_thread
+    if speaking_thread and speaking_thread.is_alive():
+        stop_speaking()
+    speaking_thread = threading.Thread(target=speak, args=(text,))
+    speaking_thread.start()
+
 # 🧠 Core assistant behaviors
 def stop_action():
-    speak("Very well.")
+    speak_async("Very well.")
     time.sleep(1.2)
 
 def shutdown_action():
-    speak("Powering off.")
+    speak_async("Powering off.")
+    time.sleep(1.2)
     exit()
 
 core_commands = {
@@ -29,7 +41,7 @@ core_commands = {
     "shutdown": shutdown_action,
 }
 
-# 🛠️ System control command map (you’ll extend this over time)
+# 🛠️ System control command map (extendable)
 command_map = {
     # "lock screen": lock_screen,
     # "take screenshot": take_screenshot,
@@ -57,51 +69,52 @@ def main():
         print("🎤 Nova is on standby...")
 
         while True:
-            print("Try waking Nova...")
             try:
+                print("Try waking Nova...")
                 audio = recognizer.listen(source, timeout=5)
                 wake_query = recognizer.recognize_google(audio).lower()
                 print("Heard:", wake_query)
 
-                # Allow shutdown without saying "nova"
-                matched_shutdown = next(
+                # 🔌 Allow shutdown without saying Nova
+                shutdown_match = next(
                     (action for phrase, action in core_commands.items() if phrase in wake_query and "shut" in phrase),
                     None
                 )
-                if matched_shutdown:
-                    matched_shutdown()
+                if shutdown_match:
+                    shutdown_match()
                     return
 
+                # 🔄 Interrupt speech if Nova is heard
                 if "nova" not in wake_query:
                     continue
 
+                stop_speaking()  # ⛔ Interrupt current speech
                 print("🎙️ Nova Active...")
-                speak(random.choice(wake_responses))
+                speak_async(random.choice(wake_responses))
 
                 command = listen_for_command()
                 if not command:
-                    speak("I didn't catch that.")
+                    speak_async("I didn't catch that.")
                     continue
 
-                # Handle core commands like stop/shutdown
-                matched_core = next(
-                    (action for phrase, action in core_commands.items() if phrase in command),
-                    None
-                )
-                if matched_core:
-                    matched_core()
+                # 👋 Dismiss listening if user says nevermind
+                if is_dismiss_command(command):
+                    speak_async("Okaaay.")
                     continue
 
-                # Handle mapped system control commands
-                matched_system = next(
-                    (action for phrase, action in command_map.items() if phrase in command),
-                    None
-                )
-                if matched_system:
-                    matched_system()
+                # Handle core commands
+                core_match = next((a for k, a in core_commands.items() if k in command), None)
+                if core_match:
+                    core_match()
                     continue
 
-                # Fallback: attempt dynamic application opening
+                # Handle system control mapped commands
+                system_match = next((a for k, a in command_map.items() if k in command), None)
+                if system_match:
+                    system_match()
+                    continue
+
+                # 🧠 Fallback: try dynamic app open
                 open_application(command)
 
             except sr.WaitTimeoutError:

@@ -1,27 +1,34 @@
+# --- utils.py ---
 import os
 import uuid
 import pygame
+import threading
 from pathlib import Path
 from google.cloud import texttospeech
 
-# Set absolute path to your service account key
+# Set credentials
 base_dir = Path(__file__).resolve().parent.parent
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(base_dir / "nova-va.json")
 
-# Initialize Google TTS client
+# TTS client setup
 tts_client = texttospeech.TextToSpeechClient()
-
-# Voice settings
 voice_params = texttospeech.VoiceSelectionParams(
     language_code="en-IN",
     name="en-IN-Chirp3-HD-Callirrhoe"
 )
 audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
-# Initialize pygame mixer
+# Initialize mixer once
 pygame.mixer.init()
 
+# Global interrupt flag
+interrupted = False
+
+# Speak function that can be interrupted
 def speak(text: str):
+    global interrupted
+    interrupted = False
+
     synthesis_input = texttospeech.SynthesisInput(text=text)
     response = tts_client.synthesize_speech(
         input=synthesis_input,
@@ -37,12 +44,18 @@ def speak(text: str):
     pygame.mixer.music.play()
 
     while pygame.mixer.music.get_busy():
+        if interrupted:
+            pygame.mixer.music.stop()
+            break
         pygame.time.Clock().tick(10)
 
-    pygame.mixer.music.stop()
-    pygame.mixer.music.unload()  # ✅ Unload the file
-    os.remove(filename)          # ✅ Now it's safe to delete
+    pygame.mixer.music.unload()
+    os.remove(filename)
 
+
+def stop_speaking():
+    global interrupted
+    interrupted = True
 
 
 def is_dismiss_command(text: str) -> bool:
@@ -50,3 +63,4 @@ def is_dismiss_command(text: str) -> bool:
         return False
     dismiss_phrases = ["nevermind", "never mind", "nothing", "leave it", "forget it"]
     return any(phrase in text.lower() for phrase in dismiss_phrases)
+
