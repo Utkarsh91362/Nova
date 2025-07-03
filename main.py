@@ -11,6 +11,8 @@ from actions.system_controls.adjust_volume import adjust_volume
 from actions.system_controls.adjust_brightness import adjust_brightness
 from actions.system_controls.restart_system import restart_system
 from actions.system_controls.shutdown_system import shutdown_system
+from actions.browser_and_internet.open_website import open_website
+from actions.browser_and_internet.web_query import web_query
 
 
 
@@ -62,6 +64,8 @@ command_map = [
     (lambda cmd: "brightness" in cmd, adjust_brightness),
     (lambda cmd: "restart" in cmd or "reboot" in cmd, restart_system),
     (lambda cmd: "restart" in cmd or "shutdown" in cmd, shutdown_system),
+    (lambda cmd: cmd.startswith("search "), open_website),
+    (lambda cmd: any(q in cmd for q in ["what is", "who is", "where is", "tell me", "explain", "intro", "define", "brief"]), web_query),
     
 
 ]
