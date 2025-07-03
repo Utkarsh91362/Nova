@@ -10,7 +10,8 @@ wake_responses = [
     "How can I help you?",
     "What can I do for you today?",
     "I'm listening.",
-    "How may I be of assistance?"
+    "How may I be of assistance?",
+    "hmmm"
 ]
 
 # 🧠 Core assistant behaviors
@@ -41,7 +42,7 @@ def listen_for_command():
         print("🎤 Listening for command...")
         recognizer.adjust_for_ambient_noise(source)
         try:
-            audio = recognizer.listen(source, timeout=7)
+            audio = recognizer.listen(source, timeout=8)
             command = recognizer.recognize_google(audio).lower()
             print("Command:", command)
             return command
