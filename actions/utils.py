@@ -1,8 +1,8 @@
-# --- utils.py ---
 import os
 import uuid
 import pygame
 import threading
+import speech_recognition as sr
 from pathlib import Path
 from google.cloud import texttospeech
 
@@ -18,13 +18,11 @@ voice_params = texttospeech.VoiceSelectionParams(
 )
 audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
-# Initialize mixer once
+# Initialize mixer
 pygame.mixer.init()
 
-# Global interrupt flag
 interrupted = False
 
-# Speak function that can be interrupted
 def speak(text: str):
     global interrupted
     interrupted = False
@@ -64,3 +62,15 @@ def is_dismiss_command(text: str) -> bool:
     dismiss_phrases = ["nevermind", "never mind", "nothing", "leave it", "forget it"]
     return any(phrase in text.lower() for phrase in dismiss_phrases)
 
+
+def listen_for_command(timeout: int = 6):
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        recognizer.adjust_for_ambient_noise(source)
+        try:
+            print("🎤 Listening for confirmation...")
+            audio = recognizer.listen(source, timeout=timeout)
+            command = recognizer.recognize_google(audio).lower()
+            return command
+        except:
+            return None

@@ -4,6 +4,17 @@ import time
 import threading
 from actions.utils import *
 from actions.system_controls.open_application import open_application
+from actions.system_controls.close_application import close_application
+from actions.system_controls.lock_screen import lock_screen  # 🔒 Add this module
+from actions.system_controls.screenshot import take_screenshot
+from actions.system_controls.adjust_volume import adjust_volume
+from actions.system_controls.adjust_brightness import adjust_brightness
+from actions.system_controls.restart_system import restart_system
+from actions.system_controls.shutdown_system import shutdown_system
+
+
+
+
 
 # 🌟 Wake responses
 wake_responses = [
@@ -30,22 +41,30 @@ def stop_action():
     speak_async("Very well.")
     time.sleep(1.2)
 
-def shutdown_action():
-    speak_async("Powering off.")
+def terminate_action():
+    speak_async("Terminating program.")
     time.sleep(1.2)
     exit()
 
 core_commands = {
     "stop": stop_action,
-    "shut down": shutdown_action,
-    "shutdown": shutdown_action,
+    "terminate": terminate_action,
+    
 }
 
-# 🛠️ System control command map (extendable)
-command_map = {
-    # "lock screen": lock_screen,
-    # "take screenshot": take_screenshot,
-}
+# 🛠️ System control command map with conditions (no if-else chains)
+command_map = [
+    (lambda cmd: cmd.startswith("open"), open_application),
+    (lambda cmd: cmd.startswith("close"), close_application),
+    (lambda cmd: "lock" in cmd and "screen" in cmd, lock_screen),
+    (lambda cmd: cmd.startswith("take"), take_screenshot),
+    (lambda cmd: "volume" in cmd or "mute" in cmd or "unmute" in cmd, adjust_volume),
+    (lambda cmd: "brightness" in cmd, adjust_brightness),
+    (lambda cmd: "restart" in cmd or "reboot" in cmd, restart_system),
+    (lambda cmd: "restart" in cmd or "shutdown" in cmd, shutdown_system),
+    
+
+]
 
 # 🎤 Listen for one command
 def listen_for_command():
@@ -75,20 +94,18 @@ def main():
                 wake_query = recognizer.recognize_google(audio).lower()
                 print("Heard:", wake_query)
 
-                # 🔌 Allow shutdown without saying Nova
-                shutdown_match = next(
-                    (action for phrase, action in core_commands.items() if phrase in wake_query and "shut" in phrase),
+                terminate_match = next(
+                    (action for phrase, action in core_commands.items() if phrase in wake_query and "terminate" in phrase),
                     None
                 )
-                if shutdown_match:
-                    shutdown_match()
+                if terminate_match:
+                    terminate_match()
                     return
 
-                # 🔄 Interrupt speech if Nova is heard
                 if "nova" not in wake_query:
                     continue
 
-                stop_speaking()  # ⛔ Interrupt current speech
+                stop_speaking()
                 print("🎙️ Nova Active...")
                 speak_async(random.choice(wake_responses))
 
@@ -97,25 +114,23 @@ def main():
                     speak_async("I didn't catch that.")
                     continue
 
-                # 👋 Dismiss listening if user says nevermind
                 if is_dismiss_command(command):
                     speak_async("Okaaay.")
                     continue
 
-                # Handle core commands
+                # Core commands
                 core_match = next((a for k, a in core_commands.items() if k in command), None)
                 if core_match:
                     core_match()
                     continue
 
-                # Handle system control mapped commands
-                system_match = next((a for k, a in command_map.items() if k in command), None)
+                # System commands with condition-based matching
+                system_match = next((action for cond, action in command_map if cond(command)), None)
                 if system_match:
-                    system_match()
+                    system_match(command)
                     continue
 
-                # 🧠 Fallback: try dynamic app open
-                open_application(command)
+                speak_async("I'm not sure how to handle that.")
 
             except sr.WaitTimeoutError:
                 continue
