@@ -26,7 +26,7 @@
 - [x] Say directly “open Chrome” etc.
 - [x] Open specific website (e.g., “open YouTube”)
 - [x] Perform Google search (“search for cats”)
-- [x] Read top Google result aloud
+- [x] Read top Google result aloud (but pretty basic)
 
 ---
 
